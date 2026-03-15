@@ -1,9 +1,9 @@
-# ============================================================
-# PROJECT: Underwater Acoustic Communication Simulation
-# ENVIRONMENT: Shallow Water, 2km Range, 15kHz Carrier
-# MODEL: Thorp Absorption & Practical Spreading (k=1.5)
-# MODULATION: Binary Phase Shift Keying (BPSK)
-# ============================================================
+"""
+Underwater Acoustic Communication Simulator
+Author: Lara Dogan
+Description: BPSK modulation performance over underwater channels
+using the Thorp attenuation model and AWGN.
+"""
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -11,121 +11,154 @@ import matplotlib.pyplot as plt
 fs = 100000
 fc = 15000
 bit_rate = 5000
-num_bits = 50
-t_bit = np.arange(0, 1/bit_rate, 1/fs)
-
-
-bits = np.random.randint(0, 2, num_bits)
-print(f"Original Bits (First 10): {bits[:10]}")
-tx_signal = np.array([])
-
-for bit in bits:
-
-    phase = 0 if bit == 1 else np.pi
-    wave = np.sin(2 * np.pi * fc * t_bit + phase)
-    tx_signal = np.concatenate([tx_signal, wave])
-
-
-plt.figure(figsize=(12, 4))
-plt.plot(tx_signal[:500])
-plt.title("Transmitted BPSK Signal (Phase 2: Perfect)")
-plt.xlabel("Samples")
-plt.ylabel("Amplitude")
-plt.grid(True)
-plt.show()
-
-print(f"Generated {num_bits} bits. Ready for the ocean!")
-
-distance_km = 5.0
+num_bits_demo = 5000
+num_bits_ber = 1000
 k = 1.5
 
 
-f_khz = fc / 1000
-f2 = f_khz**2
-alpha = (0.11 * (f2 / (1 + f2)) + 44 * (f2 / (4100 + f2)) + 0.000275 * f2 + 0.003)
+def calculate_thorp(f_hz):
+
+    f_khz = f_hz / 1000
+    f2 = f_khz ** 2
+    return (0.11 * (f2 / (1 + f2)) + 44 * (f2 / (4100 + f2)) + 0.000275 * f2 + 0.003)
 
 
-path_loss_db = (10 * k * np.log10(distance_km * 1000)) + (alpha * distance_km)
-gain = 10**(-path_loss_db / 20)
+def run_detailed_report(dist_km=5.0, snr_db=0, report_title="ACOUSTIC LINK ANALYSIS"):
+
+    print(f"\n--- RUNNING ANALYSIS: {dist_km}km at {snr_db}dB SNR ---")
+    alpha = calculate_thorp(fc)
 
 
-rx_weak = tx_signal * gain
+    path_loss_db = (10 * k * np.log10(dist_km * 1000)) + (alpha * dist_km)
+    gain = 10 ** (-path_loss_db / 20)
 
 
-snr_db = 0
-sig_pwr = np.mean(rx_weak**2)
-noise_pwr = sig_pwr / (10**(snr_db / 10))
-noise = np.sqrt(noise_pwr) * np.random.randn(len(rx_weak))
+    bits = np.random.randint(0, 2, num_bits_demo)
+    t_bit = np.arange(0, 1 / bit_rate, 1 / fs)
+
+    tx_signal = []
+    for bit in bits:
+        phase = 0 if bit == 1 else np.pi
+        tx_signal.extend(np.sin(2 * np.pi * fc * t_bit + phase))
+    tx_signal = np.array(tx_signal)
 
 
-rx_signal = rx_weak + noise
+    rx_weak = tx_signal * gain
+    sig_pwr = np.mean(rx_weak ** 2)
+    noise_pwr = sig_pwr / (10 ** (snr_db / 10))
+    rx_signal = rx_weak + np.sqrt(noise_pwr) * np.random.randn(len(rx_weak))
 
 
-plt.figure(figsize=(12, 4))
-plt.plot(rx_signal[:500], color='red')
-plt.title(f"Received Signal (Phase 3: After 2km in the Ocean)")
-plt.xlabel("Samples")
-plt.ylabel("Amplitude")
-plt.grid(True)
-plt.show()
+    received_bits = []
+    samples_per_bit = len(t_bit)
+    ref = np.sin(2 * np.pi * fc * t_bit)
+    for i in range(num_bits_demo):
+        seg = rx_signal[i * samples_per_bit: (i + 1) * samples_per_bit]
+        received_bits.append(1 if np.sum(seg * ref) > 0 else 0)
 
-received_bits = []
+    received_bits = np.array(received_bits)
+    errors = np.sum(bits != received_bits)
+    ber = (errors / num_bits_demo) * 100
 
-
-for i in range(num_bits):
-
-    start = i * len(t_bit)
-    end = (i + 1) * len(t_bit)
-    bit_segment = rx_signal[start:end]
-
-
-
-    clean_reference = np.sin(2 * np.pi * fc * t_bit)
-    decision_variable = np.sum(bit_segment * clean_reference)
-
-
-    if decision_variable > 0:
-        received_bits.append(1)
-    else:
-        received_bits.append(0)
-
-received_bits = np.array(received_bits)
+    print("\n" + "-" * 30)
+    print("  COMMUNICATION LINK METRICS")
+    print("-" * 30)
+    print(f"  Distance        : {dist_km} km")
+    print(f"  Channel SNR     : {snr_db} dB")
+    print(f"  Data Rate       : {bit_rate} bps")
+    print(f"  Path Loss       : {path_loss_db:.2f} dB")
+    print(f"  Calculated BER  : {ber:.4f}%")
+    print("-" * 30)
+    # -------------------------
 
 
-errors = np.sum(bits != received_bits)
-ber = errors / num_bits
 
-print("-" * 30)
-print(f"Original Bits (First 10): {bits[:10]}")
-print(f"Received Bits (First 10): {received_bits[:10]}")
-print(f"Total Errors: {errors} out of {num_bits}")
-print(f"Bit Error Rate (BER): {ber * 100}%")
-print("-" * 30)
-
-print("\n" + "="*50)
-print("       UNDERWATER LINK ANALYSIS REPORT")
-print("="*50)
-results_table = [
-    ["Parameter", "Value", "Description"],
-    ["-"*15, "-"*15, "-"*20],
-    ["Carrier Freq", f"{fc/1000} kHz", "Transmission Pitch"],
-    ["Distance", f"{distance_km} km", "Range through water"],
-    ["SNR", f"{snr_db} dB", "Signal-to-Noise Ratio"],
-    ["Bit Rate", f"{bit_rate} bps", "Data Speed"],
-    ["Path Loss", f"{path_loss_db:.2f} dB", "Energy 'eaten' by Ocean"],
-    ["Final BER", f"{ber:.2f}%", "Percentage of Errors"]
-]
-
-for row in results_table:
-    print(f"{row[0]:<18} | {row[1]:<15} | {row[2]}")
-
-print("="*50)
+    plt.figure(figsize=(12, 7))
+    plt.clf()
 
 
-if ber == 0:
-    print("ANALYSIS: Link is stable and perfect.")
-elif ber < 10:
-    print("ANALYSIS: Realistic link. Minor noise interference.")
-else:
-    print("ANALYSIS: Link Failure. Noise/Distance too high for BPSK.")
-print("="*50)
+    plt.subplot(2, 1, 1)
+    plt.plot(tx_signal[:500])
+    plt.title("Transmitted Signal (First 5 Bits) - " + str(report_title))
+    plt.grid(True, alpha=0.3)
+
+
+    plt.subplot(2, 1, 2)
+
+    bit_count_for_visualization = 5
+    start_sample = 0
+    end_sample = samples_per_bit * bit_count_for_visualization
+
+    plt.plot(rx_signal[start_sample:end_sample], color='red', alpha=0.8)
+    dynamic_label = "Received Signal (Dist: " + str(dist_km) + "km, SNR: " + str(snr_db) + "dB)"
+    plt.title(dynamic_label)
+    plt.xlabel("Samples")
+    plt.grid(True, alpha=0.3)
+
+
+    if snr_db > 5:
+        plt.ylim([-gain * 2.5, gain * 2.5])
+
+    plt.tight_layout()
+
+    filename = f"figures/received_signal_{dist_km}km_{snr_db}dB.png"
+    plt.savefig(filename, dpi=300)
+    print(f"Görsel kaydedildi: {filename}")
+    plt.show()
+
+
+def run_ber_comparisons():
+
+    print("\n--- GENERATING PERFORMANCE CURVES ---")
+    snr_range = np.arange(-5, 16, 2)
+    distances = [1.0, 3.0, 5.0]
+
+    plt.figure(figsize=(10, 6))
+    for d in distances:
+        alpha = calculate_thorp(fc)
+        path_loss = (10 * k * np.log10(d * 1000)) + (alpha * d)
+        gain = 10 ** (-path_loss / 20)
+
+        ber_list = []
+        for snr in snr_range:
+            bits = np.random.randint(0, 2, num_bits_ber)
+            t_bit = np.arange(0, 1 / bit_rate, 1 / fs)
+
+            tx = []
+            for b in bits:
+                tx.extend(np.sin(2 * np.pi * fc * t_bit + (0 if b == 1 else np.pi)))
+            tx = np.array(tx) * gain
+
+            spwr = np.mean(tx ** 2)
+            npwr = spwr / (10 ** (snr / 10))
+            rx = tx + np.sqrt(npwr) * np.random.randn(len(tx))
+
+            ref = np.sin(2 * np.pi * fc * t_bit)
+            received = []
+            for i in range(num_bits_ber):
+                seg = rx[i * len(t_bit): (i + 1) * len(t_bit)]
+                received.append(1 if np.sum(seg * ref) > 0 else 0)
+
+            err = np.sum(bits != np.array(received))
+            ber_list.append(err / num_bits_ber)
+
+        plt.semilogy(snr_range, ber_list, 'o-', label=f'Distance: {d}km')
+
+    plt.title("BER Performance vs SNR (Distance Comparison)")
+    plt.xlabel("SNR (dB)")
+    plt.ylabel("Bit Error Rate (BER)")
+    plt.grid(True, which="both", ls="--")
+    plt.legend()
+    plt.savefig("figures/ber_waterfall_comparison.png", dpi=300)
+    print("BER Waterfall grafiği kaydedildi: figures/ber_waterfall_comparison.png")
+    plt.show()
+
+
+if __name__ == "__main__":
+
+    run_detailed_report(dist_km=12,snr_db=-10)
+
+
+
+
+    run_ber_comparisons()

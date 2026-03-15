@@ -4,8 +4,13 @@ A Python-based simulation evaluating BPSK modulation performance over underwater
 
  Core Features:
  
+
+
+
 BPSK Modulation: Coherent transceiver chain simulation.
+
 Environmental Modeling: Frequency-dependent Thorp absorption & AWGN.
+
 Performance Metrics: BER vs. SNR analysis for various distances.
 
 How to Run:
